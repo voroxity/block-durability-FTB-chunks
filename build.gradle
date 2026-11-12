@@ -24,10 +24,24 @@ neoForge {
 repositories {
     mavenCentral()
     maven { url = 'https://api.modrinth.com/maven' }
+    maven {
+        url = 'https://maven.ftb.dev/releases'
+        content { includeGroup 'dev.ftb.mods' }
+    }
+    maven {
+        url = 'https://maven.architectury.dev/'
+        content { includeGroup 'dev.architectury' }
+    }
 }
 
 dependencies {
-    compileOnly "maven.modrinth:tacz-1.21.1:${tacz_version}"
+    compileOnly "maven.modrinth:SzzJttH8:O2Pfsh6w"
+
+    // Optional: FTB Chunks claim integration (not bundled, only needed to compile FtbChunksCompat)
+    compileOnly "dev.ftb.mods:ftb-chunks-neoforge:${ftbchunks_version}"
+    compileOnly "dev.ftb.mods:ftb-teams-neoforge:${ftbteams_version}"
+    compileOnly "dev.ftb.mods:ftb-library-neoforge:${ftblibrary_version}"
+    compileOnly "dev.architectury:architectury-neoforge:${architectury_version}"
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

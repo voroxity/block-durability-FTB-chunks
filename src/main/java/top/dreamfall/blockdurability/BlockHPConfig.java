@@ -45,6 +45,14 @@ public class BlockHPConfig {
     public static ModConfigSpec.BooleanValue HANDLE_VANILLA_EXPLOSIONS;
 
     // ========================
+    // 领地（FTB Chunks，可选）：已领地 / 未领地 分别配置，并可按团队覆盖
+    // ========================
+    public static ModConfigSpec.BooleanValue FTB_CHUNKS_INTEGRATION;
+    public static LandSection UNCLAIMED;
+    public static LandSection CLAIMED;
+    public static ModConfigSpec.ConfigValue<List<? extends String>> TEAM_OVERRIDES;
+
+    // ========================
     // 特效
     // ========================
     public static ModConfigSpec.BooleanValue SPAWN_BREAK_PARTICLES;
@@ -168,6 +176,37 @@ public class BlockHPConfig {
                 .define("handleVanillaExplosions", true);
         builder.pop();
 
+        builder.comment(
+                "Optional FTB Chunks integration. Does nothing unless FTB Chunks is installed.",
+                "Land is split into two kinds, each with its own values:",
+                "  unclaimed - land nobody has claimed (and ALL land if FTB Chunks is not installed)",
+                "  claimed   - land inside any FTB Chunks claim",
+                "Per-team overrides for claimed land go in [claims.teams].",
+                "Multipliers stack on top of the values above (hp_calculation, general, explosion).",
+                "The defaults change nothing, so existing setups behave exactly as before.")
+                .push("claims");
+        FTB_CHUNKS_INTEGRATION = builder
+                .comment("Master switch. If false, all land is treated as unclaimed.")
+                .define("ftbChunksIntegration", true);
+        UNCLAIMED = defineLandSection(builder, "unclaimed", "Settings for land that is not claimed by any team.");
+        CLAIMED = defineLandSection(builder, "claimed", "Settings for land claimed by any team (the baseline for every team).");
+        builder.push("teams");
+        TEAM_OVERRIDES = builder
+                .comment(
+                        "Per-team overrides of the [claims.claimed] values. Only the keys you list are replaced.",
+                        "Format: \"<team>|key=value|key=value...\"",
+                        "  <team> = the FTB team's UUID, short name or display name (case-insensitive)",
+                        "  keys   = enabled (true/false), hpMultiplier (>0), damageMultiplier (>=0),",
+                        "           healTimeoutSeconds (-1 = global, 0 = never heal, else seconds)",
+                        "Examples:",
+                        "  \"Dragons|hpMultiplier=3.0|damageMultiplier=0.5\"   - tougher, takes half damage",
+                        "  \"Builders|enabled=false\"                        - durability never applies to this team's claims",
+                        "  \"Raiders|healTimeoutSeconds=600\"                 - damaged blocks take 10 minutes to heal")
+                .defineListAllowEmpty("overrides", Arrays.asList(),
+                        LandProfile.TeamOverride::isValid);
+        builder.pop(); // teams
+        builder.pop(); // claims
+
         builder.push("effects");
         SPAWN_BREAK_PARTICLES = builder
                 .comment("Spawn block break particles when damaged")
@@ -181,6 +220,25 @@ public class BlockHPConfig {
         builder.pop();
 
         return new Config();
+    }
+
+    private static LandSection defineLandSection(ModConfigSpec.Builder builder, String name, String comment) {
+        LandSection section = new LandSection();
+        builder.comment(comment).push(name);
+        section.enabled = builder
+                .comment("If false, the durability system ignores blocks on this land (no bullet or explosion durability damage).")
+                .define("enabled", true);
+        section.hpMultiplier = builder
+                .comment("Multiplier on every block's max HP on this land (2.0 = twice as tough).")
+                .defineInRange("hpMultiplier", 1.0, 0.01, 1000.0);
+        section.damageMultiplier = builder
+                .comment("Multiplier on all durability damage (bullets and explosions) dealt to blocks on this land. 0 = invulnerable.")
+                .defineInRange("damageMultiplier", 1.0, 0.0, 1000.0);
+        section.healTimeoutSeconds = builder
+                .comment("Seconds before a damaged block on this land heals. -1 = use the global heal setting, 0 = never heal.")
+                .defineInRange("healTimeoutSeconds", -1, -1, 86400);
+        builder.pop();
+        return section;
     }
 
     public static boolean isValidWhitelistEntry(Object obj) {
@@ -211,4 +269,20 @@ public class BlockHPConfig {
     }
 
     public static class Config {}
+
+    /** The settings for one kind of land (claimed or unclaimed). */
+    public static class LandSection {
+        public ModConfigSpec.BooleanValue enabled;
+        public ModConfigSpec.DoubleValue hpMultiplier;
+        public ModConfigSpec.DoubleValue damageMultiplier;
+        public ModConfigSpec.IntValue healTimeoutSeconds;
+
+        public LandProfile toProfile() {
+            return new LandProfile(
+                    enabled.get(),
+                    hpMultiplier.get().floatValue(),
+                    damageMultiplier.get().floatValue(),
+                    healTimeoutSeconds.get());
+        }
+    }
 }

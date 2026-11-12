@@ -31,6 +31,10 @@ public class TaczHitHandler {
         // 不在白名单 → 什么都不做，TACZ 原逻辑照常
         if (!BlockHPManager.isBreakable(state)) return;
 
+        // Claimed/unclaimed land rules (and per-team overrides): nothing to do where durability is off.
+        LandProfile profile = LandProfiles.resolve(serverLevel, pos);
+        if (!profile.canDamage()) return;
+
         EntityKineticBullet bullet = event.getAmmo();
         Vec3 hitVec = event.getHitResult().getLocation();
 
@@ -45,12 +49,12 @@ public class TaczHitHandler {
         if (!Float.isFinite(damage) || damage <= 0) return;
 
         // --- 造成伤害 ---
-        Optional<Float> remaining = BlockHPManager.damageBlock(level, pos, state, damage);
+        Optional<Float> remaining = BlockHPManager.damageBlock(serverLevel, pos, state, damage, profile);
 
         if (remaining.isEmpty()) {
             BlockHPEventHandler.spawnBreakEffects(serverLevel, pos, state);
         } else if (remaining.get() > 0) {
-            float maxHP = BlockHPManager.getMaxHP(state);
+            float maxHP = BlockHPManager.getMaxHP(state, profile);
             float ratio = maxHP > 0 ? (1f - (remaining.get() / maxHP)) : 0f;
             BlockHPEventHandler.spawnHitEffects(serverLevel, pos, state, hitVec, ratio);
         }

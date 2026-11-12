@@ -4,6 +4,7 @@ import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import net.minecraft.world.level.GameRules;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
@@ -48,6 +49,19 @@ public class BlockDurability {
             LOGGER.info("TACZ detected - Block Durability bullet hit handler registered!");
         } catch (ClassNotFoundException e) {
             LOGGER.info("TACZ not found - Block Durability will run in explosion-only mode until TACZ is installed.");
+        }
+
+        // Optional FTB Chunks integration: claimed/unclaimed/team-specific durability settings.
+        // FtbChunksCompat is the only class that touches FTB types, so it is only loaded here.
+        if (ModList.get().isLoaded("ftbchunks")) {
+            try {
+                FtbChunksCompat.init();
+                LOGGER.info("FTB Chunks detected - claimed/unclaimed land settings enabled.");
+            } catch (LinkageError | RuntimeException e) {
+                LOGGER.warn("FTB Chunks is installed but its API could not be used; all land will be treated as unclaimed. {}", e.toString());
+            }
+        } else {
+            LOGGER.info("FTB Chunks not found - all land is treated as unclaimed.");
         }
 
         // 补写配置文件中缺失的新增配置项

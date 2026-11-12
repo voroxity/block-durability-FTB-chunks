@@ -22,4 +22,11 @@ versionRange = "[1.21.1,1.22)"
 [[dependencies.blockdurability]]
 modId = "tacz"
 type = "optional"
-versionRange = "[1.1.6,1.2.0)"
+versionRange = "[1.2.0,)"
+
+[[dependencies.blockdurability]]
+modId = "ftbchunks"
+type = "optional"
+versionRange = "[2101.1.0,)"
+ordering = "AFTER"
+side = "BOTH"

@@ -126,6 +126,39 @@ blockHPOverrides = []
 
 如果确实需要覆盖某个方块的计算结果，可以按 `"minecraft:block_id=数值"` 的格式添加条目。
 
+## 领地兼容（FTB Chunks，可选）
+
+安装 [FTB Chunks](https://modrinth.com/mod/ftb-chunks)（1.21.1 NeoForge）后，方块耐久会区分**已领地**与**未领地**的土地，两者各有独立配置，并且已领地的数值可以按**团队**单独覆盖。未安装 FTB Chunks 时，所有土地都按“未领地”处理，模组行为与之前完全一致。
+
+```
+[claims]
+ftbChunksIntegration = true
+
+[claims.unclaimed]          # 没有被任何团队领地的土地
+enabled = true              # false = 这里不启用方块耐久
+hpMultiplier = 1.0          # 方块最大 HP 倍率
+damageMultiplier = 1.0      # 耐久伤害倍率（子弹与爆炸），0 = 无敌
+healTimeoutSeconds = -1     # -1 = 使用全局自愈设置，0 = 不自愈
+
+[claims.claimed]            # 任意团队领地内的土地（所有团队的基准值）
+enabled = true
+hpMultiplier = 1.0
+damageMultiplier = 1.0
+healTimeoutSeconds = -1
+
+[claims.teams]
+overrides = [
+    "Dragons|hpMultiplier=3.0|damageMultiplier=0.5",
+    "Builders|enabled=false",
+    "Raiders|healTimeoutSeconds=600"
+]
+```
+
+- 倍率叠加在 `hp_calculation`、`general`、`explosion` 的原有数值之上，默认值（全部为 1.0）不改变任何行为。
+- `overrides` 每一项的格式为 `"<团队>|键=值|键=值"`，`<团队>` 可以写 FTB 团队的 UUID、简称或显示名（不区分大小写）；只会替换列出的键，其余沿用 `[claims.claimed]`。
+- 可用的键：`enabled`、`hpMultiplier`、`damageMultiplier`、`healTimeoutSeconds`。
+- 土地被领地、取消领地或换主人后，已有的受损进度会重置。
+
 ## 游戏内规则
 
 管理员可以动态调整受损方块的恢复时间：

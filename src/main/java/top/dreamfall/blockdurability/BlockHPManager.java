@@ -47,6 +47,7 @@ public class BlockHPManager {
      */
     public static synchronized void invalidateCache() {
         compiled = false;
+        LandProfiles.invalidate();
         BlockDurability.LOGGER.info("Block Durability cache invalidated due to config reload.");
     }
 
@@ -71,19 +72,34 @@ public class BlockHPManager {
 
     /**
      * 对方块造成伤害。不在白名单的方块会被忽略。
+     * 领地配置（已领地 / 未领地 / 团队覆盖）会按方块所在位置自动应用。
      * @return Optional.empty() = 方块已破坏；否则返回剩余 HP。
      */
     public static Optional<Float> damageBlock(Level level, BlockPos pos, BlockState state, float damage) {
         if (!(level instanceof ServerLevel serverLevel)) return Optional.of(0f);
         if (!isBreakable(state)) return Optional.of(0f);
+        return damageBlock(serverLevel, pos, state, damage, LandProfiles.resolve(serverLevel, pos));
+    }
+
+    /**
+     * Same as above, with an already-resolved land profile (lets explosion loops reuse a per-chunk lookup).
+     * The profile's damageMultiplier is applied here, so callers pass the raw damage.
+     */
+    public static Optional<Float> damageBlock(ServerLevel serverLevel, BlockPos pos, BlockState state,
+                                              float damage, LandProfile profile) {
+        if (!isBreakable(state)) return Optional.of(0f);
+        if (!profile.canDamage()) return Optional.of(0f);
+        if (!Float.isFinite(damage) || damage <= 0) return Optional.of(0f);
+        damage *= profile.damageMultiplier();
         if (!Float.isFinite(damage) || damage <= 0) return Optional.of(0f);
 
-        BlockKey key = new BlockKey(level.dimension(), pos.immutable());
+        BlockKey key = new BlockKey(serverLevel.dimension(), pos.immutable());
         DamageState existing = damagedBlocks.get(key);
-        float maxHP = getMaxHP(state);
+        float maxHP = getMaxHP(state, profile);
         float currentHP;
 
         if (existing != null) {
+            // Max HP changed (config edit, or the chunk was claimed/unclaimed/changed owner): start fresh.
             if (Math.abs(existing.maxHP - maxHP) > 0.01f) {
                 clearCrackOverlay(serverLevel, pos, existing.crackId);
                 damagedBlocks.remove(key);
@@ -97,7 +113,7 @@ public class BlockHPManager {
         if (newHP <= 0) {
             damagedBlocks.remove(key);
             if (existing != null) clearCrackOverlay(serverLevel, pos, existing.crackId);
-            level.destroyBlock(pos, BlockHPConfig.DROP_ITEMS.get());
+            serverLevel.destroyBlock(pos, BlockHPConfig.DROP_ITEMS.get());
             return Optional.empty();
         }
 
@@ -130,9 +146,21 @@ public class BlockHPManager {
         return computed;
     }
 
+    /**
+     * Max HP on a specific piece of land: the base value scaled by the land profile's hpMultiplier.
+     */
+    public static float getMaxHP(BlockState state, LandProfile profile) {
+        float scaled = getMaxHP(state) * profile.hpMultiplier();
+        return Float.isFinite(scaled) ? Math.max(0.01f, scaled) : getMaxHP(state);
+    }
+
     public static float getCurrentHP(Level level, BlockPos pos, BlockState state) {
         DamageState existing = damagedBlocks.get(new BlockKey(level.dimension(), pos));
-        return (existing != null) ? existing.currentHP : getMaxHP(state);
+        if (existing != null) return existing.currentHP;
+        if (level instanceof ServerLevel serverLevel) {
+            return getMaxHP(state, LandProfiles.resolve(serverLevel, pos));
+        }
+        return getMaxHP(state);
     }
 
     public static void onBlockRemoved(Level level, BlockPos pos) {
@@ -171,9 +199,9 @@ public class BlockHPManager {
             }
         }
 
-        final int effectiveTimeoutSec = timeoutSeconds;
+        final int globalTimeoutSec = timeoutSeconds;
         long now = System.currentTimeMillis();
-        long timeoutMs = (effectiveTimeoutSec > 0) ? effectiveTimeoutSec * 1000L : Long.MAX_VALUE;
+        LandProfiles.Cache profiles = LandProfiles.newCache(level);
 
         damagedBlocks.entrySet().removeIf(entry -> {
             if (!entry.getKey().dimension().equals(level.dimension())) return false;
@@ -187,8 +215,17 @@ public class BlockHPManager {
                 return true;
             }
 
+            // The land is now one where durability is off (e.g. it was claimed by a team with enabled=false).
+            LandProfile profile = profiles.get(p);
+            if (!profile.enabled()) {
+                clearCrackOverlay(level, p, entry.getValue().crackId());
+                return true;
+            }
+
+            // Per-land heal timeout wins; -1 falls back to the gamerule/global setting.
+            int timeoutSec = profile.healTimeoutSeconds() >= 0 ? profile.healTimeoutSeconds() : globalTimeoutSec;
             DamageState ds = entry.getValue();
-            if (effectiveTimeoutSec > 0 && now - ds.lastHitTime() > timeoutMs) {
+            if (timeoutSec > 0 && now - ds.lastHitTime() > timeoutSec * 1000L) {
                 clearCrackOverlay(level, p, ds.crackId());
                 return true;
             }

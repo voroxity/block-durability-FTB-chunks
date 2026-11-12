@@ -68,6 +68,9 @@ public class BlockHPEventHandler {
         float multiplier = BlockHPConfig.EXPLOSION_DAMAGE_MULTIPLIER.get().floatValue();
         float baseDamage = effectiveRadius * 4.0f * multiplier;
 
+        // Claims are per chunk, so memoise the land profile per chunk for this blast.
+        LandProfiles.Cache landProfiles = LandProfiles.newCache(serverLevel);
+
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
@@ -85,6 +88,10 @@ public class BlockHPEventHandler {
                     BlockState state = serverLevel.getBlockState(cursor);
                     if (state.isAir()) continue;
                     if (!BlockHPManager.isBreakable(state)) continue;
+
+                    // Claimed/unclaimed land rules: skip early (before the raycast) where durability can't apply.
+                    LandProfile profile = landProfiles.get(cursor);
+                    if (!profile.canDamage()) continue;
 
                     // 视线阻挡检测（如果隔着未破坏的实心厚掩体，阻挡冲击波）
                     Vec3 targetCenter = new Vec3(x + 0.5, y + 0.5, z + 0.5);
@@ -108,11 +115,11 @@ public class BlockHPEventHandler {
                     if (!Float.isFinite(damage) || damage <= 0.1f) continue;
 
                     BlockPos immutablePos = cursor.immutable();
-                    Optional<Float> remaining = BlockHPManager.damageBlock(serverLevel, immutablePos, state, damage);
+                    Optional<Float> remaining = BlockHPManager.damageBlock(serverLevel, immutablePos, state, damage, profile);
                     if (remaining.isEmpty()) {
                         spawnBreakEffects(serverLevel, immutablePos, state);
                     } else if (remaining.get() > 0) {
-                        float maxHP = BlockHPManager.getMaxHP(state);
+                        float maxHP = BlockHPManager.getMaxHP(state, profile);
                         float ratio = maxHP > 0 ? (1f - (remaining.get() / maxHP)) : 0f;
                         spawnHitEffects(serverLevel, immutablePos, state, targetCenter, ratio);
                     }
