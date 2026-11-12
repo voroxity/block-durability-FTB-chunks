@@ -13,7 +13,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import java.util.Optional;
 
 /**
- * 监听 TaCZ 子弹命中事件（仅在 TaCZ 存在时注册）。
+ * Listens for TaCZ bullet-hit events (only registered when TaCZ is present).
  */
 public class TaczHitHandler {
 
@@ -28,7 +28,7 @@ public class TaczHitHandler {
         BlockPos pos = event.getHitResult().getBlockPos();
         BlockState state = event.getState();
 
-        // 不在白名单 → 什么都不做，TACZ 原逻辑照常
+        // Not whitelisted → do nothing; TACZ's own logic proceeds as usual
         if (!BlockHPManager.isBreakable(state)) return;
 
         // Claimed/unclaimed land rules (and per-team overrides): nothing to do where durability is off.
@@ -38,7 +38,7 @@ public class TaczHitHandler {
         EntityKineticBullet bullet = event.getAmmo();
         Vec3 hitVec = event.getHitResult().getLocation();
 
-        // --- 计算单发直接命中伤害 ---
+        // --- Compute the damage of a single direct hit ---
         float damage;
         if (BlockHPConfig.USE_BULLET_DAMAGE.get()) {
             damage = bullet.getDamage(hitVec)
@@ -48,7 +48,7 @@ public class TaczHitHandler {
         }
         if (!Float.isFinite(damage) || damage <= 0) return;
 
-        // --- 造成伤害 ---
+        // --- Apply the damage ---
         Optional<Float> remaining = BlockHPManager.damageBlock(serverLevel, pos, state, damage, profile);
 
         if (remaining.isEmpty()) {

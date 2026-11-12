@@ -27,8 +27,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 核心事件处理器：监听爆炸（全模组通用 + TaCZ 爆炸）、自愈与区块生命周期。
- * 不依赖任何 TaCZ 特有类，无 TaCZ 时亦可独立稳健运行。
+ * Core event handler: listens for explosions (all mods + TaCZ), healing and chunk lifecycle.
+ * Depends on no TaCZ-specific classes, so it runs fine without TaCZ.
  */
 public class BlockHPEventHandler {
 
@@ -42,7 +42,7 @@ public class BlockHPEventHandler {
         Explosion explosion = event.getExplosion();
         Entity directSource = explosion.getDirectSourceEntity();
 
-        // 识别是否为 TaCZ 爆炸
+        // Detect whether this is a TaCZ explosion
         boolean isTacz = isTaczExplosion(directSource, explosion);
         if (!isTacz && !BlockHPConfig.HANDLE_VANILLA_EXPLOSIONS.get()) {
             return;
@@ -54,7 +54,7 @@ public class BlockHPEventHandler {
         float effectiveRadius = Math.min(radius, maxRadius);
         if (effectiveRadius <= 0f) return;
 
-        // 原版已被选定直接摧毁的方块集合（双轨制：原版该炸掉的维持原版行为）
+        // Blocks vanilla already selected for destruction (dual-track: blocks vanilla would destroy keep vanilla behavior)
         List<BlockPos> affectedBlocks = event.getAffectedBlocks();
         Set<BlockPos> vanillaDestroyed = new HashSet<>(affectedBlocks);
 
@@ -76,7 +76,7 @@ public class BlockHPEventHandler {
             for (int y = minY; y <= maxY; y++) {
                 for (int z = minZ; z <= maxZ; z++) {
                     cursor.set(x, y, z);
-                    // 已被原版炸掉的，不需要重复扣耐久
+                    // Already destroyed by vanilla; no need to also deduct durability
                     if (vanillaDestroyed.contains(cursor)) continue;
 
                     double dx = (x + 0.5) - center.x;
@@ -93,7 +93,7 @@ public class BlockHPEventHandler {
                     LandProfile profile = landProfiles.get(cursor);
                     if (!profile.canDamage()) continue;
 
-                    // 视线阻挡检测（如果隔着未破坏的实心厚掩体，阻挡冲击波）
+                    // Line-of-sight check (a solid, intact block in between shields the target from the blast)
                     Vec3 targetCenter = new Vec3(x + 0.5, y + 0.5, z + 0.5);
                     BlockHitResult hit = serverLevel.clip(new ClipContext(
                             center,
@@ -109,7 +109,7 @@ public class BlockHPEventHandler {
                     }
 
                     double dist = Math.sqrt(distSq);
-                    // 线性距离衰减
+                    // Linear distance falloff
                     float falloff = (float) Math.max(0.0f, 1.0f - (dist / effectiveRadius));
                     float damage = baseDamage * falloff;
                     if (!Float.isFinite(damage) || damage <= 0.1f) continue;
@@ -131,7 +131,7 @@ public class BlockHPEventHandler {
     @SubscribeEvent
     public void onLevelTick(LevelTickEvent.Post event) {
         if (event.getLevel() instanceof ServerLevel serverLevel) {
-            // 每 2 秒 (40 ticks) 检查一次残血方块的自愈与内存清理
+            // Every 2 seconds (40 ticks), check damaged blocks for healing and memory cleanup
             if (serverLevel.getGameTime() % 40 == 0) {
                 BlockHPManager.tick(serverLevel);
             }

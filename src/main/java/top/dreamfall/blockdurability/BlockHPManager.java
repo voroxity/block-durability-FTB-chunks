@@ -18,8 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
- * 方块耐久管理。白名单制（支持 Tag）+ 硬度计算血量。
- * 具备多维度安全隔离与超时自动愈合/内存清理机制。
+ * Block durability management. Whitelist-based (tags supported) with HP computed from hardness.
+ * Isolates state per dimension and provides timeout-based auto-healing and memory cleanup.
  */
 public class BlockHPManager {
 
@@ -32,18 +32,18 @@ public class BlockHPManager {
     private static final ConcurrentHashMap<BlockKey, DamageState> damagedBlocks = new ConcurrentHashMap<>();
     private static int nextCrackId = 0;
 
-    /** 预编译：Tag 白名单 */
+    /** Precompiled: tag whitelist */
     private static final List<TagKey<Block>> tagWhitelist = new ArrayList<>();
-    /** 预编译：名字白名单正则表达式 */
+    /** Precompiled: name whitelist regex patterns */
     private static final List<Pattern> nameWhitelistPatterns = new ArrayList<>();
-    /** 预编译的 HP 覆盖：Pattern → hp */
+    /** Precompiled HP overrides: Pattern → hp */
     private static final List<HPOverride> hpOverrides = new ArrayList<>();
     private static volatile boolean compiled = false;
 
-    // ==================== 公开 API ====================
+    // ==================== Public API ====================
 
     /**
-     * 重置预编译缓存（配置热重载时调用）
+     * Resets the precompiled caches (called on config hot reload)
      */
     public static synchronized void invalidateCache() {
         compiled = false;
@@ -52,17 +52,17 @@ public class BlockHPManager {
     }
 
     /**
-     * @return 方块是否在白名单中（可被破坏）
+     * @return whether the block is whitelisted (can be damaged)
      */
     public static boolean isBreakable(BlockState state) {
         compileIfNeeded();
 
-        // Tag 匹配（O(1)，优先）
+        // Tag match (O(1), checked first)
         for (TagKey<Block> tag : tagWhitelist) {
             if (state.is(tag)) return true;
         }
 
-        // 名字匹配（正则 & 通配符）
+        // Name match (regex & wildcard)
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         for (Pattern pattern : nameWhitelistPatterns) {
             if (pattern.matcher(id).matches()) return true;
@@ -71,9 +71,9 @@ public class BlockHPManager {
     }
 
     /**
-     * 对方块造成伤害。不在白名单的方块会被忽略。
-     * 领地配置（已领地 / 未领地 / 团队覆盖）会按方块所在位置自动应用。
-     * @return Optional.empty() = 方块已破坏；否则返回剩余 HP。
+     * Damages a block. Blocks that are not whitelisted are ignored.
+     * The land profile (claimed / unclaimed / team override) is applied automatically based on the block's position.
+     * @return Optional.empty() = the block was destroyed; otherwise the remaining HP.
      */
     public static Optional<Float> damageBlock(Level level, BlockPos pos, BlockState state, float damage) {
         if (!(level instanceof ServerLevel serverLevel)) return Optional.of(0f);
@@ -124,7 +124,7 @@ public class BlockHPManager {
     }
 
     /**
-     * 获取方块最大 HP，优先采用覆盖项，否则基于硬度公式。
+     * Gets a block's max HP: an override if one matches, otherwise the hardness formula.
      */
     public static float getMaxHP(BlockState state) {
         compileIfNeeded();
@@ -172,7 +172,7 @@ public class BlockHPManager {
     }
 
     /**
-     * 清理指定位置的受损状态，并向附近玩家同步清除破坏裂纹。
+     * Clears the damage state at a position and tells nearby players to remove the crack overlay.
      */
     public static void clearBlock(ServerLevel level, BlockPos pos) {
         BlockKey key = new BlockKey(level.dimension(), pos.immutable());
@@ -187,8 +187,8 @@ public class BlockHPManager {
     }
 
     /**
-     * 定时自愈与内存清理：方块在设定时间内未受伤害则清除裂纹并回收内存。
-     * 支持通过配置文件或 /gamerule blockDurabilityHealSeconds 动态调整。
+     * Periodic healing and memory cleanup: blocks not damaged within the timeout lose their cracks and are dropped from the cache.
+     * The timeout can be set via the config file or /gamerule blockDurabilityHealSeconds.
      */
     public static void tick(ServerLevel level) {
         int timeoutSeconds = BlockHPConfig.HEAL_TIMEOUT_SECONDS.get();
@@ -208,7 +208,7 @@ public class BlockHPManager {
             BlockPos p = entry.getKey().pos();
             if (!level.isLoaded(p)) return false;
 
-            // 方块已被破坏（变成空气）或变成不可破坏方块 → 立即清理客户端裂纹并移出缓存
+            // Block was destroyed (now air) or is no longer breakable → clear client cracks and drop it from the cache immediately
             BlockState current = level.getBlockState(p);
             if (current.isAir() || !isBreakable(current)) {
                 clearCrackOverlay(level, p, entry.getValue().crackId());
@@ -234,7 +234,7 @@ public class BlockHPManager {
     }
 
     /**
-     * 区块卸载时清理对应的裂纹缓存，防止内存泄漏。
+     * Clears the crack cache for a chunk when it unloads, to prevent memory leaks.
      */
     public static void onChunkUnload(ServerLevel level, ChunkPos chunkPos) {
         damagedBlocks.entrySet().removeIf(entry -> {
@@ -248,7 +248,7 @@ public class BlockHPManager {
         });
     }
 
-    // ==================== 内部 ====================
+    // ==================== Internal ====================
 
     private static synchronized int allocateCrackId() {
         return nextCrackId++;
@@ -290,7 +290,7 @@ public class BlockHPManager {
             if (trimmed.isEmpty()) continue;
 
             if (trimmed.startsWith("tag:")) {
-                // Tag 匹配：tag:namespace:path
+                // Tag match: tag:namespace:path
                 String tagId = trimmed.substring(4).trim();
                 ResourceLocation rl = tagId.isEmpty() ? null : ResourceLocation.tryParse(tagId);
                 if (rl != null && !rl.getPath().isEmpty()) {
@@ -299,12 +299,12 @@ public class BlockHPManager {
                     BlockDurability.LOGGER.warn("Invalid tag in block whitelist: '{}'. Skipping.", trimmed);
                 }
             } else {
-                // 名字匹配（精确 / 通配符）
+                // Name match (exact / wildcard)
                 nameWhitelistPatterns.add(globToPattern(trimmed));
             }
         }
 
-        // 编译 HP 覆盖
+        // Compile HP overrides
         hpOverrides.clear();
         for (String entry : BlockHPConfig.BLOCK_HP_OVERRIDES.get()) {
             if (entry == null) continue;
@@ -334,7 +334,7 @@ public class BlockHPManager {
     }
 
     /**
-     * 将通配符 glob 转为正则表达式 Pattern
+     * Converts a wildcard glob into a regex Pattern
      */
     public static Pattern globToPattern(String glob) {
         String regex = "^" + Pattern.quote(glob).replace("*", "\\E.*\\Q") + "$";

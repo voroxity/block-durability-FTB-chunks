@@ -19,15 +19,15 @@ public class BlockDurability {
     public static final String MOD_ID = "blockdurability";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-    // 注册游戏规则：/gamerule blockDurabilityHealSeconds <秒数>
+    // Register game rule: /gamerule blockDurabilityHealSeconds <seconds>
     public static final GameRules.Key<GameRules.IntegerValue> RULE_BLOCK_HEAL_SECONDS =
             GameRules.register("blockDurabilityHealSeconds", GameRules.Category.MISC, GameRules.IntegerValue.create(120));
 
     public BlockDurability(IEventBus modEventBus, ModContainer container) {
-        // 注册配置
+        // Register config
         container.registerConfig(ModConfig.Type.COMMON, BlockHPConfig.SPEC);
 
-        // 监听配置加载与重载事件，确保热重载后白名单和血量覆盖即时生效
+        // Listen for config load/reload so the whitelist and HP overrides take effect immediately after a hot reload
         modEventBus.addListener((ModConfigEvent.Loading event) -> {
             if (event.getConfig().getSpec() == BlockHPConfig.SPEC) {
                 BlockHPManager.invalidateCache();
@@ -39,10 +39,10 @@ public class BlockDurability {
             }
         });
 
-        // 注册核心事件监听器（爆炸、自愈与区块生命周期，无 TaCZ 时亦可独立运行）
+        // Register the core event listeners (explosions, healing and chunk lifecycle; works without TaCZ)
         NeoForge.EVENT_BUS.register(new BlockHPEventHandler());
 
-        // 安全注册 TACZ 子弹直击事件监听（TACZ 未安装时静默跳过）
+        // Safely register the TACZ bullet-hit listener (silently skipped if TACZ is not installed)
         try {
             Class.forName("com.tacz.guns.api.event.server.AmmoHitBlockEvent");
             NeoForge.EVENT_BUS.register(new TaczHitHandler());
@@ -64,12 +64,12 @@ public class BlockDurability {
             LOGGER.info("FTB Chunks not found - all land is treated as unclaimed.");
         }
 
-        // 补写配置文件中缺失的新增配置项
+        // Write any newly added config options that are missing from the config file
         updateConfigFile();
     }
 
     /**
-     * 用当前 spec 修正配置文件，把新增的配置项补进去。
+     * Corrects the config file against the current spec, adding any new options.
      */
     private static void updateConfigFile() {
         try {

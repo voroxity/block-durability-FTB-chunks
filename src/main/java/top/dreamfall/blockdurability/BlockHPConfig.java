@@ -12,7 +12,7 @@ public class BlockHPConfig {
     public static final Config CONFIG;
 
     // ========================
-    // 通用
+    // General
     // ========================
     public static ModConfigSpec.BooleanValue ENABLED;
     public static ModConfigSpec.DoubleValue DAMAGE_PER_HIT;
@@ -21,23 +21,23 @@ public class BlockHPConfig {
     public static ModConfigSpec.IntValue HEAL_TIMEOUT_SECONDS;
 
     // ========================
-    // 白名单：只有匹配的方块才能被破坏
+    // Whitelist: only matching blocks can be damaged
     // ========================
     public static ModConfigSpec.ConfigValue<List<? extends String>> BLOCK_WHITELIST;
 
     // ========================
-    // 血量计算：基于方块的硬度（与爆炸抗性正相关）
+    // HP calculation: based on block hardness (correlates with explosion resistance)
     // ========================
     public static ModConfigSpec.DoubleValue HARDNESS_MULTIPLIER;
     public static ModConfigSpec.DoubleValue MIN_BLOCK_HP;
 
     // ========================
-    // 可选的按方块 HP 覆盖
+    // Optional per-block HP overrides
     // ========================
     public static ModConfigSpec.ConfigValue<List<? extends String>> BLOCK_HP_OVERRIDES;
 
     // ========================
-    // 爆炸耐久机制（TaCZ 爆炸、原版 TNT、苦力怕、模组爆炸）
+    // Explosion durability (TaCZ explosions, vanilla TNT, creepers, modded explosions)
     // ========================
     public static ModConfigSpec.BooleanValue EXPLOSION_ENABLED;
     public static ModConfigSpec.DoubleValue EXPLOSION_DAMAGE_MULTIPLIER;
@@ -45,7 +45,7 @@ public class BlockHPConfig {
     public static ModConfigSpec.BooleanValue HANDLE_VANILLA_EXPLOSIONS;
 
     // ========================
-    // 领地（FTB Chunks，可选）：已领地 / 未领地 分别配置，并可按团队覆盖
+    // Land claims (FTB Chunks, optional): claimed / unclaimed configured separately, with per-team overrides
     // ========================
     public static ModConfigSpec.BooleanValue FTB_CHUNKS_INTEGRATION;
     public static LandSection UNCLAIMED;
@@ -53,7 +53,7 @@ public class BlockHPConfig {
     public static ModConfigSpec.ConfigValue<List<? extends String>> TEAM_OVERRIDES;
 
     // ========================
-    // 特效
+    // Effects
     // ========================
     public static ModConfigSpec.BooleanValue SPAWN_BREAK_PARTICLES;
     public static ModConfigSpec.BooleanValue PLAY_BREAK_SOUND;
@@ -99,32 +99,32 @@ public class BlockHPConfig {
                 )
                 .defineListAllowEmpty("blockWhitelist",
                         Arrays.asList(
-                                // === 玻璃（Common Tags，兼容所有模组） ===
+                                // === Glass (Common Tags, compatible with all mods) ===
                                 "tag:c:glass_blocks",
                                 "tag:c:glass_panes",
-                                // === 木板 ===
+                                // === Planks ===
                                 "tag:minecraft:planks",
-                                // === 原木 ===
+                                // === Logs ===
                                 "tag:minecraft:logs",
-                                // === 树叶 ===
+                                // === Leaves ===
                                 "tag:minecraft:leaves",
-                                // === 木门 ===
+                                // === Wooden doors ===
                                 "tag:minecraft:wooden_doors",
-                                // === 木活板门 ===
+                                // === Wooden trapdoors ===
                                 "tag:minecraft:wooden_trapdoors",
-                                // === 木栅栏 ===
+                                // === Wooden fences ===
                                 "tag:minecraft:fences",
-                                // === 栅栏门 ===
+                                // === Fence gates ===
                                 "tag:minecraft:fence_gates",
-                                // === 木楼梯 ===
+                                // === Wooden stairs ===
                                 "tag:minecraft:wooden_stairs",
-                                // === 木半砖 ===
+                                // === Wooden slabs ===
                                 "tag:minecraft:wooden_slabs",
-                                // === 木按钮 ===
+                                // === Wooden buttons ===
                                 "tag:minecraft:wooden_buttons",
-                                // === 木压力板 ===
+                                // === Wooden pressure plates ===
                                 "tag:minecraft:wooden_pressure_plates",
-                                // === 告示牌 ===
+                                // === Signs ===
                                 "tag:minecraft:standing_signs",
                                 "tag:minecraft:wall_signs",
                                 "tag:minecraft:ceiling_hanging_signs",
