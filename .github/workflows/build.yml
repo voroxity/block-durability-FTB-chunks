@@ -1,0 +1,96 @@
+name: Build Mod JAR
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build NeoForge mod
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Read mod metadata
+        id: mod
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          properties = {}
+          for line in Path("gradle.properties").read_text(
+              encoding="utf-8"
+          ).splitlines():
+              line = line.strip()
+              if not line or line.startswith(("#", "!")):
+                  continue
+              key, separator, value = line.partition("=")
+              if separator:
+                  properties[key.strip()] = value.strip()
+
+          mod_id = properties.get("mod_id", "")
+          version = properties.get("mod_version", "")
+
+          for key, value in (("mod_id", mod_id), ("mod_version", version)):
+              if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", value):
+                  raise SystemExit(f"Missing or unsupported {key}: {value!r}")
+
+          jar_path = f"build/libs/{mod_id}-{version}.jar"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"version={version}\n")
+              output.write(f"jar_path={jar_path}\n")
+
+          print(f"Artifact name: {version}")
+          print(f"Expected JAR: {jar_path}")
+          PY
+
+      - name: Clean and build
+        run: ./gradlew clean build --no-daemon --stacktrace
+
+      - name: Verify distributable JAR
+        env:
+          JAR_PATH: ${{ steps.mod.outputs.jar_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -s "$JAR_PATH" ]]; then
+            echo "::error::Expected distributable JAR was not found: $JAR_PATH"
+            if [[ -d build/libs ]]; then
+              find build/libs -maxdepth 1 -type f -print
+            fi
+            exit 1
+          fi
+
+          echo "Uploading: $JAR_PATH"
+
+      - name: Upload mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.mod.outputs.version }}
+          path: ${{ steps.mod.outputs.jar_path }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
