@@ -37,12 +37,12 @@ Adds durability to Minecraft blocks, so firearms and explosions can wear them do
 
 The v2.0.0 main branch targets Minecraft 1.21.1 NeoForge and focuses on tying explosions into block durability:
 
-- **TaCZ explosives**: RPGs, grenades and similar explosions that normally only deal impact and do not break terrain now apply durability damage to whitelisted blocks in range, scaled by distance.
-- **Vanilla and other explosions**: TNT, creepers, Create cannons and similar explosions still destroy blocks with their original logic; whitelisted blocks in range that were not destroyed outright still take durability damage that falls off with distance.
+- **TaCZ explosives**: RPGs, grenades and similar explosions that normally only deal impact and do not break terrain now apply durability damage to damageable blocks in range, scaled by distance.
+- **Vanilla and other explosions**: TNT, creepers, Create cannons and similar explosions still destroy blocks with their original logic; damageable blocks in range that were not destroyed outright still take durability damage that falls off with distance.
 - **Cover**: solid collision shapes between the explosion and a block shield it from durability damage, reducing damage through walls.
-- **Configurable**: the explosion damage multiplier, processing radius, vanilla-explosion toggle, block HP and whitelist can all be adjusted in the server config.
+- **Configurable**: the explosion damage multiplier, processing radius, vanilla-explosion toggle, block HP and block list can all be adjusted in the server config.
 
-> Only whitelisted blocks are affected by this durability system. The actual result depends on block hardness, HP overrides, the explosion's position and the configured multipliers.
+> Only blocks on the block list are affected by this durability system (set `blacklistMode = true` to invert the list). The actual result depends on block hardness, HP overrides, the explosion's position and the configured multipliers.
 
 ## Obsidian Can Be Blasted Open Too
 
@@ -52,11 +52,11 @@ Obsidian no longer has to rely on vanilla's "cannot be blown up" rule. Its durab
 block HP = max(minBlockHP, vanilla block hardness × hardnessMultiplier)
 ```
 
-Obsidian's vanilla hardness is `50`. Add it to the whitelist and set `hardnessMultiplier` to `3.0`:
+Obsidian's vanilla hardness is `50`. Add it to the block list and set `hardnessMultiplier` to `3.0`:
 
 ```toml
-[whitelist]
-blockWhitelist = [
+[block_list]
+blockList = [
     "minecraft:obsidian"
 ]
 
@@ -103,11 +103,11 @@ healTimeoutSeconds = 120
 - `handleVanillaExplosions`: whether to handle non-TaCZ explosions such as TNT and creepers.
 - `healTimeoutSeconds`: how long after the last hit a damaged block recovers; set to `0` to disable healing.
 
-The whitelist supports block tags, exact IDs and `*` wildcards:
+The block list supports block tags, exact IDs and `*` wildcards:
 
 ```toml
-[whitelist]
-blockWhitelist = [
+[block_list]
+blockList = [
     "tag:minecraft:planks",
     "tag:minecraft:logs",
     "minecraft:obsidian",

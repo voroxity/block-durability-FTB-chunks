@@ -28,7 +28,7 @@ public class TaczHitHandler {
         BlockPos pos = event.getHitResult().getBlockPos();
         BlockState state = event.getState();
 
-        // Not whitelisted → do nothing; TACZ's own logic proceeds as usual
+        // Not damageable (per the block list) → do nothing; TACZ's own logic proceeds as usual
         if (!BlockHPManager.isBreakable(state)) return;
 
         // Claimed/unclaimed land rules (and per-team overrides): nothing to do where durability is off.

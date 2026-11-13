@@ -4,6 +4,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -21,9 +22,10 @@ public class BlockHPConfig {
     public static ModConfigSpec.IntValue HEAL_TIMEOUT_SECONDS;
 
     // ========================
-    // Whitelist: only matching blocks can be damaged
+    // Block list: by default only matching blocks can be damaged (blacklistMode inverts this)
     // ========================
-    public static ModConfigSpec.ConfigValue<List<? extends String>> BLOCK_WHITELIST;
+    public static ModConfigSpec.BooleanValue BLACKLIST_MODE;
+    public static ModConfigSpec.ConfigValue<List<? extends String>> BLOCK_LIST;
 
     // ========================
     // HP calculation: based on block hardness (correlates with explosion resistance)
@@ -85,52 +87,26 @@ public class BlockHPConfig {
                 .defineInRange("healTimeoutSeconds", 120, 0, 86400);
         builder.pop();
 
-        builder.push("whitelist");
-        BLOCK_WHITELIST = builder
+        builder.push("block_list");
+        BLACKLIST_MODE = builder
                 .comment(
-                        "Whitelist: only blocks matching these patterns can be damaged by bullets and explosions.",
+                        "If true (default), blockList below is treated as a BLACKLIST (deny list): every block EXCEPT the ones listed can be damaged.",
+                        "Air, fluids and unbreakable blocks (bedrock, barriers, command blocks, ...) are never damageable in either mode.",
+                        "Remember to replace the default list when you turn this on.",
+                        "Performance: with this on, far more blocks per explosion take part in the damage calculation. Consider lowering [explosion] maxRadius.")
+                .define("blacklistMode", true);
+        BLOCK_LIST = builder
+                .comment(
+                        "Block list:",
                         "Two formats supported:",
                         "  \"tag:namespace:path\"  → Block tag matching (auto-compatible with all mods!)",
                         "  \"modid:block_id\"     → Exact name match",
                         "  \"modid:*pattern*\"    → Wildcard name match",
-                        "Blocks NOT in this list will ignore block durability damage.",
-                        "",
-                        "Default covers: glass, wood planks, logs, leaves, wooden doors/trapdoors/fences"
+                        ""
                 )
-                .defineListAllowEmpty("blockWhitelist",
-                        Arrays.asList(
-                                // === Glass (Common Tags, compatible with all mods) ===
-                                "tag:c:glass_blocks",
-                                "tag:c:glass_panes",
-                                // === Planks ===
-                                "tag:minecraft:planks",
-                                // === Logs ===
-                                "tag:minecraft:logs",
-                                // === Leaves ===
-                                "tag:minecraft:leaves",
-                                // === Wooden doors ===
-                                "tag:minecraft:wooden_doors",
-                                // === Wooden trapdoors ===
-                                "tag:minecraft:wooden_trapdoors",
-                                // === Wooden fences ===
-                                "tag:minecraft:fences",
-                                // === Fence gates ===
-                                "tag:minecraft:fence_gates",
-                                // === Wooden stairs ===
-                                "tag:minecraft:wooden_stairs",
-                                // === Wooden slabs ===
-                                "tag:minecraft:wooden_slabs",
-                                // === Wooden buttons ===
-                                "tag:minecraft:wooden_buttons",
-                                // === Wooden pressure plates ===
-                                "tag:minecraft:wooden_pressure_plates",
-                                // === Signs ===
-                                "tag:minecraft:standing_signs",
-                                "tag:minecraft:wall_signs",
-                                "tag:minecraft:ceiling_hanging_signs",
-                                "tag:minecraft:wall_hanging_signs"
-                        ),
-                        BlockHPConfig::isValidWhitelistEntry);
+                .defineListAllowEmpty("blockList",
+                        Arrays.asList(),
+                        BlockHPConfig::isValidBlockListEntry);
         builder.pop();
 
         builder.push("hp_calculation");
@@ -237,11 +213,21 @@ public class BlockHPConfig {
         section.healTimeoutSeconds = builder
                 .comment("Seconds before a damaged block on this land heals. -1 = use the global heal setting, 0 = never heal.")
                 .defineInRange("healTimeoutSeconds", -1, -1, 86400);
+        section.blockHPOverrides = builder
+                .comment(
+                        "Per-block HP overrides for this land only. Format: \"modid:block_id=hp\", wildcards allowed. First match wins.",
+                        "A match sets the block's max HP on this land to exactly hp. It beats [hp_calculation] blockHPOverrides,",
+                        "the hardness formula and this section's hpMultiplier (team hpMultiplier values do not scale it either).",
+                        "Examples:",
+                        "  \"minecraft:obsidian=300\"  - obsidian has 300 HP on this land",
+                        "  \"minecraft:*glass*=2\"      - all glass has 2 HP on this land")
+                .defineListAllowEmpty("blockHPOverrides", Arrays.asList(),
+                        BlockHPConfig::isValidHpOverride);
         builder.pop();
         return section;
     }
 
-    public static boolean isValidWhitelistEntry(Object obj) {
+    public static boolean isValidBlockListEntry(Object obj) {
         if (!(obj instanceof String str)) return false;
         String trimmed = str.trim();
         if (trimmed.isEmpty()) return false;
@@ -276,13 +262,20 @@ public class BlockHPConfig {
         public ModConfigSpec.DoubleValue hpMultiplier;
         public ModConfigSpec.DoubleValue damageMultiplier;
         public ModConfigSpec.IntValue healTimeoutSeconds;
+        public ModConfigSpec.ConfigValue<List<? extends String>> blockHPOverrides;
 
         public LandProfile toProfile() {
+            List<LandProfile.HpOverride> overrides = new ArrayList<>();
+            for (String entry : blockHPOverrides.get()) {
+                LandProfile.HpOverride.parse(entry).ifPresentOrElse(overrides::add,
+                        () -> BlockDurability.LOGGER.warn("Invalid blockHPOverrides entry in [claims]: '{}'. Skipping.", entry));
+            }
             return new LandProfile(
                     enabled.get(),
                     hpMultiplier.get().floatValue(),
                     damageMultiplier.get().floatValue(),
-                    healTimeoutSeconds.get());
+                    healTimeoutSeconds.get(),
+                    overrides);
         }
     }
 }

@@ -82,4 +82,48 @@ public class LandProfileTest {
         assertFalse(new LandProfile(false, 1f, 1f, -1).canDamage());
         assertFalse(new LandProfile(true, 1f, 0f, -1).canDamage());
     }
+
+    @Test
+    @DisplayName("HP override parsing: valid and invalid entries")
+    void parsesHpOverrides() {
+        var ok = LandProfile.HpOverride.parse("minecraft:obsidian=300").orElseThrow();
+        assertEquals(300f, ok.hp());
+        assertTrue(ok.matches("minecraft:obsidian"));
+        assertFalse(ok.matches("minecraft:obsidian_slab"));
+
+        var wild = LandProfile.HpOverride.parse("minecraft:*glass*=2.5").orElseThrow();
+        assertTrue(wild.matches("minecraft:glass"));
+        assertTrue(wild.matches("minecraft:red_stained_glass_pane"));
+        assertFalse(wild.matches("minecraft:stone"));
+
+        assertTrue(LandProfile.HpOverride.parse(null).isEmpty());
+        assertTrue(LandProfile.HpOverride.parse("minecraft:stone").isEmpty());
+        assertTrue(LandProfile.HpOverride.parse("=5").isEmpty());
+        assertTrue(LandProfile.HpOverride.parse("minecraft:stone=0").isEmpty());
+        assertTrue(LandProfile.HpOverride.parse("minecraft:stone=-3").isEmpty());
+        assertTrue(LandProfile.HpOverride.parse("minecraft:stone=NaN").isEmpty());
+        assertTrue(LandProfile.HpOverride.parse("minecraft:stone=abc").isEmpty());
+    }
+
+    @Test
+    @DisplayName("hpOverrideFor: first matching entry wins; empty when nothing matches")
+    void hpOverrideLookup() {
+        var profile = new LandProfile(true, 1f, 1f, -1, java.util.List.of(
+                LandProfile.HpOverride.parse("minecraft:obsidian=300").orElseThrow(),
+                LandProfile.HpOverride.parse("minecraft:*=5").orElseThrow()));
+        assertEquals(300f, profile.hpOverrideFor("minecraft:obsidian").orElseThrow());
+        assertEquals(5f, profile.hpOverrideFor("minecraft:dirt").orElseThrow());
+        assertTrue(profile.hpOverrideFor("create:andesite_casing").isEmpty());
+        assertTrue(LandProfile.NEUTRAL.hpOverrideFor("minecraft:obsidian").isEmpty());
+    }
+
+    @Test
+    @DisplayName("Team overrides keep the claimed profile's HP overrides")
+    void teamOverrideKeepsHpOverrides() {
+        var claimed = new LandProfile(true, 2f, 1f, -1, java.util.List.of(
+                LandProfile.HpOverride.parse("minecraft:obsidian=300").orElseThrow()));
+        var merged = LandProfile.TeamOverride.parse("T|hpMultiplier=3.0").orElseThrow().applyTo(claimed);
+        assertEquals(3f, merged.hpMultiplier());
+        assertEquals(300f, merged.hpOverrideFor("minecraft:obsidian").orElseThrow());
+    }
 }

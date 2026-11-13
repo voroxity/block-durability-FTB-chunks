@@ -27,7 +27,7 @@ public class BlockDurability {
         // Register config
         container.registerConfig(ModConfig.Type.COMMON, BlockHPConfig.SPEC);
 
-        // Listen for config load/reload so the whitelist and HP overrides take effect immediately after a hot reload
+        // Listen for config load/reload so the block list and HP overrides take effect immediately after a hot reload
         modEventBus.addListener((ModConfigEvent.Loading event) -> {
             if (event.getConfig().getSpec() == BlockHPConfig.SPEC) {
                 BlockHPManager.invalidateCache();

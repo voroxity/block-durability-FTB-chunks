@@ -30,19 +30,19 @@ public class BlockHPTest {
     }
 
     @Test
-    @DisplayName("Whitelist entry validation")
-    void testWhitelistEntryValidation() {
-        assertTrue(BlockHPConfig.isValidWhitelistEntry("tag:minecraft:planks"));
-        assertTrue(BlockHPConfig.isValidWhitelistEntry("tag:c:glass_blocks"));
-        assertTrue(BlockHPConfig.isValidWhitelistEntry("minecraft:stone"));
-        assertTrue(BlockHPConfig.isValidWhitelistEntry("minecraft:*glass*"));
+    @DisplayName("Block list entry validation")
+    void testBlockListEntryValidation() {
+        assertTrue(BlockHPConfig.isValidBlockListEntry("tag:minecraft:planks"));
+        assertTrue(BlockHPConfig.isValidBlockListEntry("tag:c:glass_blocks"));
+        assertTrue(BlockHPConfig.isValidBlockListEntry("minecraft:stone"));
+        assertTrue(BlockHPConfig.isValidBlockListEntry("minecraft:*glass*"));
 
         // Invalid entries must be rejected
-        assertFalse(BlockHPConfig.isValidWhitelistEntry(""));
-        assertFalse(BlockHPConfig.isValidWhitelistEntry("   "));
-        assertFalse(BlockHPConfig.isValidWhitelistEntry("tag:"));
-        assertFalse(BlockHPConfig.isValidWhitelistEntry("tag:invalid colon:spaced"));
-        assertFalse(BlockHPConfig.isValidWhitelistEntry(123));
+        assertFalse(BlockHPConfig.isValidBlockListEntry(""));
+        assertFalse(BlockHPConfig.isValidBlockListEntry("   "));
+        assertFalse(BlockHPConfig.isValidBlockListEntry("tag:"));
+        assertFalse(BlockHPConfig.isValidBlockListEntry("tag:invalid colon:spaced"));
+        assertFalse(BlockHPConfig.isValidBlockListEntry(123));
     }
 
     @Test

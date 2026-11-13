@@ -11,6 +11,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
@@ -18,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
- * Block durability management. Whitelist-based (tags supported) with HP computed from hardness.
+ * Block durability management. Block-list-based (tags supported) with HP computed from hardness.
  * Isolates state per dimension and provides timeout-based auto-healing and memory cleanup.
  */
 public class BlockHPManager {
@@ -32,13 +33,15 @@ public class BlockHPManager {
     private static final ConcurrentHashMap<BlockKey, DamageState> damagedBlocks = new ConcurrentHashMap<>();
     private static int nextCrackId = 0;
 
-    /** Precompiled: tag whitelist */
-    private static final List<TagKey<Block>> tagWhitelist = new ArrayList<>();
-    /** Precompiled: name whitelist regex patterns */
-    private static final List<Pattern> nameWhitelistPatterns = new ArrayList<>();
+    /** Precompiled: tag block list */
+    private static final List<TagKey<Block>> tagBlockList = new ArrayList<>();
+    /** Precompiled: name block list regex patterns */
+    private static final List<Pattern> nameBlockListPatterns = new ArrayList<>();
     /** Precompiled HP overrides: Pattern → hp */
     private static final List<HPOverride> hpOverrides = new ArrayList<>();
     private static volatile boolean compiled = false;
+    /** Cached [block_list] blacklistMode; refreshed on every recompile. */
+    private static volatile boolean blacklistMode = false;
 
     // ==================== Public API ====================
 
@@ -52,26 +55,36 @@ public class BlockHPManager {
     }
 
     /**
-     * @return whether the block is whitelisted (can be damaged)
+     * @return whether the block can be damaged: it is on the block list, or, in blacklist mode,
+     *         it is NOT on the list (and is not air, a fluid or an unbreakable block).
      */
     public static boolean isBreakable(BlockState state) {
         compileIfNeeded();
+        boolean listed = isListed(state);
+        if (!blacklistMode) return listed;
+        if (listed) return false;
+        return !state.isAir()
+                && !(state.getBlock() instanceof LiquidBlock)
+                && state.getBlock().defaultDestroyTime() >= 0f;
+    }
 
+    /** Whether the block matches any entry of blockList (tag or name). */
+    private static boolean isListed(BlockState state) {
         // Tag match (O(1), checked first)
-        for (TagKey<Block> tag : tagWhitelist) {
+        for (TagKey<Block> tag : tagBlockList) {
             if (state.is(tag)) return true;
         }
 
         // Name match (regex & wildcard)
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
-        for (Pattern pattern : nameWhitelistPatterns) {
+        for (Pattern pattern : nameBlockListPatterns) {
             if (pattern.matcher(id).matches()) return true;
         }
         return false;
     }
 
     /**
-     * Damages a block. Blocks that are not whitelisted are ignored.
+     * Damages a block. Blocks that are not damageable (per the block list and blacklistMode) are ignored.
      * The land profile (claimed / unclaimed / team override) is applied automatically based on the block's position.
      * @return Optional.empty() = the block was destroyed; otherwise the remaining HP.
      */
@@ -147,9 +160,15 @@ public class BlockHPManager {
     }
 
     /**
-     * Max HP on a specific piece of land: the base value scaled by the land profile's hpMultiplier.
+     * Max HP on a specific piece of land. A matching land-specific override is used as-is; otherwise the
+     * base value (global override or hardness formula) is scaled by the land profile's hpMultiplier.
      */
     public static float getMaxHP(BlockState state, LandProfile profile) {
+        if (!profile.hpOverrides().isEmpty()) {
+            String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+            Optional<Float> landHp = profile.hpOverrideFor(id);
+            if (landHp.isPresent()) return Math.max(0.01f, landHp.get());
+        }
         float scaled = getMaxHP(state) * profile.hpMultiplier();
         return Float.isFinite(scaled) ? Math.max(0.01f, scaled) : getMaxHP(state);
     }
@@ -281,10 +300,11 @@ public class BlockHPManager {
     private static synchronized void compileIfNeeded() {
         if (compiled) return;
 
-        tagWhitelist.clear();
-        nameWhitelistPatterns.clear();
+        blacklistMode = BlockHPConfig.BLACKLIST_MODE.get();
+        tagBlockList.clear();
+        nameBlockListPatterns.clear();
 
-        for (String entry : BlockHPConfig.BLOCK_WHITELIST.get()) {
+        for (String entry : BlockHPConfig.BLOCK_LIST.get()) {
             if (entry == null) continue;
             String trimmed = entry.trim();
             if (trimmed.isEmpty()) continue;
@@ -294,13 +314,13 @@ public class BlockHPManager {
                 String tagId = trimmed.substring(4).trim();
                 ResourceLocation rl = tagId.isEmpty() ? null : ResourceLocation.tryParse(tagId);
                 if (rl != null && !rl.getPath().isEmpty()) {
-                    tagWhitelist.add(TagKey.create(Registries.BLOCK, rl));
+                    tagBlockList.add(TagKey.create(Registries.BLOCK, rl));
                 } else {
-                    BlockDurability.LOGGER.warn("Invalid tag in block whitelist: '{}'. Skipping.", trimmed);
+                    BlockDurability.LOGGER.warn("Invalid tag in block list: '{}'. Skipping.", trimmed);
                 }
             } else {
                 // Name match (exact / wildcard)
-                nameWhitelistPatterns.add(globToPattern(trimmed));
+                nameBlockListPatterns.add(globToPattern(trimmed));
             }
         }
 
