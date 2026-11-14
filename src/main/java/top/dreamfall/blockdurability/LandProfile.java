@@ -67,8 +67,8 @@ public record LandProfile(boolean enabled, float hpMultiplier, float damageMulti
         }
     }
 
-    /** Same conversion as BlockHPManager.globToPattern, duplicated here to keep this class free of Minecraft types. */
-    private static Pattern globToPattern(String glob) {
+    /** Same conversion as BlockHPManager.globToPattern, duplicated here to keep this class free of Minecraft types. Also used by GunOverride. */
+    static Pattern globToPattern(String glob) {
         String regex = "^" + Pattern.quote(glob).replace("*", "\\E.*\\Q") + "$";
         return Pattern.compile(regex);
     }

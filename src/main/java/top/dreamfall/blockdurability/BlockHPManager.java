@@ -39,6 +39,8 @@ public class BlockHPManager {
     private static final List<Pattern> nameBlockListPatterns = new ArrayList<>();
     /** Precompiled HP overrides: Pattern → hp */
     private static final List<HPOverride> hpOverrides = new ArrayList<>();
+    /** Precompiled per-gun overrides */
+    private static final List<GunOverride> gunOverrides = new ArrayList<>();
     private static volatile boolean compiled = false;
     /** Cached [block_list] blacklistMode; refreshed on every recompile. */
     private static volatile boolean blacklistMode = false;
@@ -100,11 +102,35 @@ public class BlockHPManager {
      */
     public static Optional<Float> damageBlock(ServerLevel serverLevel, BlockPos pos, BlockState state,
                                               float damage, LandProfile profile) {
-        if (!isBreakable(state)) return Optional.of(0f);
-        if (!profile.canDamage()) return Optional.of(0f);
-        if (!Float.isFinite(damage) || damage <= 0) return Optional.of(0f);
-        damage *= profile.damageMultiplier();
-        if (!Float.isFinite(damage) || damage <= 0) return Optional.of(0f);
+        DamageOutcome outcome = applyDamage(serverLevel, pos, state, damage, profile);
+        return outcome.destroyed() ? Optional.empty() : Optional.of(outcome.remainingHP());
+    }
+
+    /**
+     * What happened when a block was damaged.
+     *
+     * @param destroyed      the block was destroyed
+     * @param remainingHP    HP left if it survived (0 if destroyed, or if no damage was applied)
+     * @param leftoverDamage if destroyed: the damage that was not needed, in the same raw units the caller passed in
+     *                       (i.e. before the land's damageMultiplier), ready to hit the next block; otherwise 0
+     */
+    public record DamageOutcome(boolean destroyed, float remainingHP, float leftoverDamage) {
+        /** No damage was applied (block not damageable, durability off on this land, or zero damage). */
+        public static final DamageOutcome NONE = new DamageOutcome(false, 0f, 0f);
+    }
+
+    /**
+     * Damages a block and reports what happened, including how much damage was left over when it was destroyed
+     * (used for penetration). The profile's damageMultiplier is applied here, so callers pass the raw damage.
+     */
+    public static DamageOutcome applyDamage(ServerLevel serverLevel, BlockPos pos, BlockState state,
+                                            float damage, LandProfile profile) {
+        if (!isBreakable(state)) return DamageOutcome.NONE;
+        if (!profile.canDamage()) return DamageOutcome.NONE;
+        if (!Float.isFinite(damage) || damage <= 0) return DamageOutcome.NONE;
+        float multiplier = profile.damageMultiplier();
+        damage *= multiplier;
+        if (!Float.isFinite(damage) || damage <= 0) return DamageOutcome.NONE;
 
         BlockKey key = new BlockKey(serverLevel.dimension(), pos.immutable());
         DamageState existing = damagedBlocks.get(key);
@@ -127,13 +153,23 @@ public class BlockHPManager {
             damagedBlocks.remove(key);
             if (existing != null) clearCrackOverlay(serverLevel, pos, existing.crackId);
             serverLevel.destroyBlock(pos, BlockHPConfig.DROP_ITEMS.get());
-            return Optional.empty();
+            // -newHP is the damage the block did not need, in multiplied units; convert back to raw units.
+            return new DamageOutcome(true, 0f, -newHP / multiplier);
         }
 
         int crackId = (existing != null) ? existing.crackId : allocateCrackId();
         damagedBlocks.put(key, new DamageState(newHP, maxHP, crackId, System.currentTimeMillis()));
         sendCrackProgress(serverLevel, pos, crackId, newHP, maxHP);
-        return Optional.of(newHP);
+        return new DamageOutcome(false, newHP, 0f);
+    }
+
+    /**
+     * The [general] gunOverrides entry matching this gun id (e.g. "tacz:ak47"); first match wins.
+     * Empty = no override: normal damage calculation, no penetration.
+     */
+    public static Optional<GunOverride> getGunOverride(String gunId) {
+        compileIfNeeded();
+        return GunOverride.find(gunOverrides, gunId);
     }
 
     /**
@@ -366,6 +402,13 @@ public class BlockHPManager {
             } catch (NumberFormatException e) {
                 BlockDurability.LOGGER.warn("Failed to parse HP number in override: '{}'. Skipping.", entry);
             }
+        }
+
+        // Compile gun overrides
+        gunOverrides.clear();
+        for (String entry : BlockHPConfig.GUN_OVERRIDES.get()) {
+            GunOverride.parse(entry).ifPresentOrElse(gunOverrides::add,
+                    () -> BlockDurability.LOGGER.warn("Invalid gun override: '{}' (expected 'modid:gun|damage=value|penetration=true/false'). Skipping.", entry));
         }
 
         compiled = true;

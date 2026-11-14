@@ -19,6 +19,7 @@ public class BlockHPConfig {
     public static ModConfigSpec.DoubleValue DAMAGE_PER_HIT;
     public static ModConfigSpec.BooleanValue USE_BULLET_DAMAGE;
     public static ModConfigSpec.DoubleValue BULLET_DAMAGE_MULTIPLIER;
+    public static ModConfigSpec.ConfigValue<List<? extends String>> GUN_OVERRIDES;
     public static ModConfigSpec.IntValue HEAL_TIMEOUT_SECONDS;
 
     // ========================
@@ -82,6 +83,25 @@ public class BlockHPConfig {
         BULLET_DAMAGE_MULTIPLIER = builder
                 .comment("Multiplier when useBulletDamage is true")
                 .defineInRange("bulletDamageMultiplier", 1.0, 0.0, 100.0);
+        GUN_OVERRIDES = builder
+                .comment(
+                        "Per-gun overrides (TaCZ). Format: \"modid:gun_id|damage=value|penetration=true\", wildcards allowed in the gun id.",
+                        "Both keys are optional. The first matching entry wins; keys you leave out use the normal behavior",
+                        "(they do not fall through to later entries).",
+                        "  damage      = exact block damage per hit for this gun. Replaces damagePerHit / useBulletDamage /",
+                        "                bulletDamageMultiplier for it. 0 = this gun never damages blocks.",
+                        "  penetration = true/false (default false). When a hit does more damage than the block's remaining HP,",
+                        "                the block is destroyed and the leftover damage carries on to the next block the bullet would hit,",
+                        "                and so on until it runs out. A block that cannot be damaged (not damageable per the block list,",
+                        "                or durability disabled / invulnerable on that land) stops the bullet.",
+                        "[claims] damageMultiplier values still apply to every block hit, so claimed land can stay tougher.",
+                        "Examples:",
+                        "  \"tacz:ak47|damage=2.0\"                   - every AK-47 hit deals 2 damage to blocks",
+                        "  \"tacz:m700|damage=10|penetration=true\"   - M700 hits deal 10 and punch through weak blocks",
+                        "  \"tacz:m4a1|penetration=true\"             - normal damage, but penetrates",
+                        "  \"tacz:*|damage=0.5\"                     - every other TaCZ gun deals 0.5 (put specific entries above)")
+                .defineListAllowEmpty("gunOverrides", Arrays.asList(),
+                        GunOverride::isValid);
         HEAL_TIMEOUT_SECONDS = builder
                 .comment("Seconds of inactivity before a damaged block heals and clears cracks (0 to disable auto-healing)")
                 .defineInRange("healTimeoutSeconds", 120, 0, 86400);

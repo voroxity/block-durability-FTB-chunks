@@ -126,11 +126,32 @@ blockHPOverrides = []
 
 If you really need to override one block's computed result, add an entry in the form `"minecraft:block_id=value"`. With FTB Chunks installed, `[claims.claimed]` has its own `blockHPOverrides` that replace these global values on claimed land (see below).
 
+## Per-Gun Overrides (TaCZ)
+
+By default every bullet hit deals `damagePerHit` (or the bullet's own damage × `bulletDamageMultiplier` when `useBulletDamage` is on). `gunOverrides` in `[general]` lets you change the block damage and enable penetration for specific guns:
+
+```toml
+[general]
+gunOverrides = [
+    "tacz:ak47|damage=2.0",
+    "tacz:m700|damage=10|penetration=true",
+    "tacz:m4a1|penetration=true",
+    "tacz:*|damage=0.5"
+]
+```
+
+- Format: `"modid:gun_id|damage=value|penetration=true/false"`. Wildcards work in the gun id. Both keys are optional.
+- The first matching entry wins, so put specific guns above wildcards. Keys an entry leaves out use the normal behavior; they do not fall through to later entries.
+- `damage` is the exact block damage per hit for that gun. `damagePerHit`, `useBulletDamage` and `bulletDamageMultiplier` are ignored for it. `0` means the gun never damages blocks.
+- `penetration` (default `false`): when a hit does more damage than the block's remaining HP, the block is destroyed and the leftover damage carries on to the next block the bullet would hit, and so on until it runs out. A block that cannot be damaged (not damageable per the block list, or durability disabled or invulnerable on that land) stops the bullet.
+- The `damageMultiplier` of the land (see below) still applies to every block hit, so claimed land can stay tougher. Leftover damage is tracked before that multiplier, so each block applies its own land's value.
+- Only affects bullet hits. Explosions (RPGs, grenades, TNT) use the `[explosion]` settings.
+
 ## Land Claim Compatibility (FTB Chunks, optional)
 
 With [FTB Chunks](https://modrinth.com/mod/ftb-chunks) (1.21.1 NeoForge) installed, block durability distinguishes **claimed** from **unclaimed** land. Each has its own settings, and the claimed values can be overridden per **team**. Without FTB Chunks, all land is treated as unclaimed and the mod behaves exactly as before.
 
-```
+```toml
 [claims]
 ftbChunksIntegration = true
 
