@@ -29,7 +29,11 @@ public final class LandProfiles {
         ClaimInfo getClaim(ServerLevel level, int chunkX, int chunkZ);
     }
 
-    private record Compiled(LandProfile unclaimed, LandProfile claimed, List<LandProfile.TeamOverride> overrides) {}
+    private record Compiled(
+            Map<String, Float> globalOverrides,
+            LandProfile unclaimed,
+            LandProfile claimed,
+            List<LandProfile.TeamOverride> teamOverrides) {}
 
     private static volatile ClaimProvider provider;
     private static volatile Compiled compiled;
@@ -43,6 +47,35 @@ public final class LandProfiles {
     /** Called on config load/reload. */
     public static void invalidate() {
         compiled = null;
+    }
+
+    /** Called on config load/reload to initialize globalOverrides from general config. */
+    public static void initGlobalOverrides(Map<String, Float> globalOverrides) {
+        Compiled c = compiled();
+        if (c == null || !globalOverrides.isEmpty()) {
+            // Store the current map so it persists through compilation
+            synchronized (LandProfiles.class) {
+                c.globalOverrides = new HashMap<>(globalOverrides);
+                c.unclaimed = BlockHPConfig.UNCLAIMED.toProfile();
+                c.claimed = BlockHPConfig.CLAIMED.toProfile();
+                List<LandProfile.TeamOverride> overridesList = teamOverrides;
+            }
+        }
+    }
+
+    private static Map<String, Float> compileMapFromRaw(Map<String, Float> rawMap) {
+        Map<String, Float> result = new HashMap<>();
+        for (Map.Entry<String, Float> entry : rawMap.entrySet()) {
+            // Parse wildcards in key and apply them to value
+            String key = entry.getKey().trim();
+            if (isValidHpOverride(entry.getValue())) {
+                String[] parts = key.split("=", 2);
+                result.put(parts[0], entry.getValue());
+            } else {
+                result.put(key, rawMap.get(key));
+            }
+        }
+        return result;
     }
 
     public static LandProfile resolve(ServerLevel level, BlockPos pos) {
@@ -88,22 +121,38 @@ public final class LandProfiles {
         }
     }
 
-    private static Compiled compiled() {
+    private static Compiled compile() {
         Compiled c = compiled;
         if (c != null) return c;
+
         synchronized (LandProfiles.class) {
             if (compiled != null) return compiled;
 
-            List<LandProfile.TeamOverride> overrides = new ArrayList<>();
+            List<LandProfile.TeamOverride> teamOverrides = new ArrayList<>();
             for (String raw : BlockHPConfig.TEAM_OVERRIDES.get()) {
                 LandProfile.TeamOverride.parse(raw).ifPresentOrElse(overrides::add,
                         () -> BlockDurability.LOGGER.warn("Invalid claims.teams.overrides entry: '{}'. Skipping.", raw));
             }
-            compiled = new Compiled(
+
+            // Compile overrides with proper wildcard support and global defaults
+            List<String> rawOverrides = BlockHPConfig.TEAM_OVERRIDES.get();
+            Compiled newCompiled = new Compiled(
+                    compileMapFromRaw(BlockHPConfig.UNCLAIMED.globalOverrides),
                     BlockHPConfig.UNCLAIMED.toProfile(),
                     BlockHPConfig.CLAIMED.toProfile(),
-                    List.copyOf(overrides));
-            return compiled;
+                    teamOverrides);
+
+            // Add unclaimed overrides if they exist in general config
+            if (!BlockHPConfig.UNCLAIMED.globalOverrides.isEmpty()) {
+                for (Map.Entry<String, Float> entry : BlockHPConfig.UNCLAIMED.globalOverrides.entrySet()) {
+                    String key = entry.getKey().trim();
+                    if (isValidHpOverride(Float.parseFloat(String.valueOf(entry.getValue())))) {
+                        newCompiled.globalOverrides.put(key, 1.0f); // Land-specific overrides applied as-is
+                    }
+                }
+            }
+
+            c = newCompiled;
         }
     }
 }

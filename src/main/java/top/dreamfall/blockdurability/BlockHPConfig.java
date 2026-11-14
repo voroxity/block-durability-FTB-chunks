@@ -6,7 +6,9 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class BlockHPConfig {
     public static final ModConfigSpec SPEC;
@@ -53,6 +55,11 @@ public class BlockHPConfig {
     public static LandSection UNCLAIMED;
     public static LandSection CLAIMED;
     public static ModConfigSpec.ConfigValue<List<? extends String>> TEAM_OVERRIDES;
+
+    // ========================
+    // Per-block HP overrides for ALL blocks (general) - applies to both claimed and unclaimed land without scaling
+    // ========================
+    public static ModConfigSpec.ConfigValue<Map<String, Float>> BLOCK_HP_OVERRIDES_GLOBA;
 
     // ========================
     // Effects
@@ -181,7 +188,10 @@ public class BlockHPConfig {
                 .defineListAllowEmpty("overrides", Arrays.asList(),
                         LandProfile.TeamOverride::isValid);
         builder.pop(); // teams
-        builder.pop(); // claims
+
+        builder.push("claims");
+        CLAIMED = defineLandSection(builder, "claimed", "Overrides for claimed land. These override both global settings and team overrides.");
+        builder.pop();
 
         builder.push("effects");
         SPAWN_BREAK_PARTICLES = builder
@@ -264,12 +274,28 @@ public class BlockHPConfig {
         public ModConfigSpec.IntValue healTimeoutSeconds;
         public ModConfigSpec.ConfigValue<List<? extends String>> blockHPOverrides;
 
+        public static Map<String, Float> getGlobalOverrides() {
+            return BLOCK_HP_OVERRIDES_GLOBA.get();
+        }
+
         public LandProfile toProfile() {
             List<LandProfile.HpOverride> overrides = new ArrayList<>();
+
+            // Parse per-block overrides from this land's blockHPOverrides field
             for (String entry : blockHPOverrides.get()) {
                 LandProfile.HpOverride.parse(entry).ifPresentOrElse(overrides::add,
                         () -> BlockDurability.LOGGER.warn("Invalid blockHPOverrides entry in [claims]: '{}'. Skipping.", entry));
             }
+
+            // Parse global overrides from BLOCK_HP_OVERRIDES_GLOBA - apply as-is without scaling
+            Map<String, Float> globalOverrides = getGlobalOverrides();
+            for (Map.Entry<String, Float> entry : globalOverrides.entrySet()) {
+                String key = entry.getKey().trim();
+                if (!key.isEmpty() && isValidHpOverride(Float.parseFloat(String.valueOf(entry.getValue())))) {
+                    overrides.add(new LandProfile.HpOverride(key, 1.0f)); // Land-specific overrides are applied as-is
+                }
+            }
+
             return new LandProfile(
                     enabled.get(),
                     hpMultiplier.get().floatValue(),

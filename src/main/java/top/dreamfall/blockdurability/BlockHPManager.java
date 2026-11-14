@@ -160,6 +160,118 @@ public class BlockHPManager {
     }
 
     /**
+     * Gets a block's max HP on land: global override (as-is), land-specific override, and hardness formula.
+     */
+    public static float getMaxHP(BlockState state, LandProfile profile) {
+        // First check for specific block overrides that only apply here (global overrides from config)
+        String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+        for (HPOverride globalOverride : getGlobalOverridesForBlock(id)) {
+            return Math.max(0.01f, globalOverride.hp());
+        }
+
+        // Get base max HP from config using general override and hardness formula
+        float baseHp = getMaxHP(state);
+
+        // Apply land-specific overrides (from profile) - these are the overrides set for this claimed land
+        if (!profile.hpOverrides().isEmpty()) {
+            // For land overrides, we want to check if there's a specific match on this block
+            boolean overrideMatchesBlock = false;
+            for (HashMap.Entry<String, Float> entry : profile.getHpOverridesEntryMap().entrySet()) {
+                String pattern = entry.getKey();
+                if (Pattern.matcher(id).matches(pattern)) {
+                    // Land override takes priority over global config overrides
+                    return Math.max(baseHp, profile.hpOverrideFor(pattern).orElse(0.01f));
+                }
+            }
+
+            // No specific match - apply land-specific scaling to the base HP from config
+            if (Math.isFinite(baseHp) && profile.hpMultiplier() > 0) {
+                baseHp *= profile.hpMultiplier();
+            }
+        }
+
+        return Math.max(0.01f, baseHp);
+    }
+
+    /**
+     * Gets global overrides for a specific block (from BLOCK_HP_OVERRIDES config only).
+     * @param blockId the full resource ID of the block being queried
+     */
+    private static List<HPOverride> getGlobalOverridesForBlock(String blockId) {
+        // Extract general block HP override patterns that are NOT team overrides (team overrides have prefix <team>)
+        String pattern = patternFromHpOverrideString(blockId);
+
+        if (pattern == null) {
+            return new ArrayList<>();
+        }
+
+        for (HPOverride globalOverride : BlockHPManager.hpOverrides) {
+            if (!globalOverride.pattern().equals(pattern)) {
+                continue;
+            }
+
+            // Verify this is a general override, not a team override
+            String[] parts = globalOverride.getPatternString().split("=", 2);
+            if (parts.length != 2 || parts[0].startsWith("<team>")) {
+                continue;
+            }
+
+            return List.of(globalOverride);
+        }
+
+        return new ArrayList<>();
+    }
+
+    /**
+     * Extracts the HP override pattern from a raw string like "minecraft:obsidian=20"
+     */
+    private static String patternFromHpOverrideString(String blockId) {
+        try {
+            int colon = blockId.indexOf(":");
+            if (colon == -1 || colon > 0) {
+                // No colon found, assume it's a team override or invalid format
+                return null;
+            }
+            String modid = blockId.substring(0, colon);
+            String rest = blockId.substring(colon + 1);
+
+            // Check if this is a valid block HP override pattern
+            if (modid.equals("minecraft") && Rest.isNumeric(rest)) {
+                return "minecraft:" + modid;
+            } else if (!modid.isEmpty() && !isTeamOverrideString(modid) && rest.matches("\\d+")) {
+                // Likely a land-specific override format: minecraft:block_id=hp
+                return "minecraft:" + modid;
+            }
+
+            // Not a valid block HP override pattern - check for team prefix
+            if (modid.startsWith("<team>")) {
+                return null;
+            }
+
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Checks if the provided string is a team override format.
+     */
+    private static boolean isTeamOverrideString(String str) {
+        int comma = str.indexOf(",");
+        if (comma != -1) {
+            // Contains multiple entries, so it's probably not a simple override list
+            // But could still be a team with one override per field - need to validate structure
+            String[] parts = str.split("=", 2);
+            if (parts.length == 2 && parts[0].isEmpty()) {
+                return true; // Team name without any overrides specified
+            }
+            return false;
+        }
+        return false;
+    }
+
+    /**
      * Max HP on a specific piece of land. A matching land-specific override is used as-is; otherwise the
      * base value (global override or hardness formula) is scaled by the land profile's hpMultiplier.
      */
