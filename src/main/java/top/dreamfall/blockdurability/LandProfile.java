@@ -11,10 +11,10 @@ import java.util.regex.Pattern;
  * Pure Java on purpose: no Minecraft or FTB types, so it is safe to load without FTB Chunks installed.
  *
  * @param enabled            false = the durability system ignores blocks on this land
- * @param hpMultiplier       scales every block's max HP (not applied to a matching hpOverrides entry)
+ * @param hpMultiplier       scales hardness-formula HP (never applied to an HP override, global or claimed)
  * @param damageMultiplier   scales all incoming durability damage (bullets and explosions); 0 = invulnerable
  * @param healTimeoutSeconds seconds before a damaged block heals; -1 = use the global heal setting, 0 = never heal
- * @param hpOverrides        per-block max HP for this land; the first matching entry wins and is used as-is
+ * @param hpOverrides        per-block max HP for this land (only the claimed section has any); the first match wins and is used as-is
  */
 public record LandProfile(boolean enabled, float hpMultiplier, float damageMultiplier,
                           int healTimeoutSeconds, List<HpOverride> hpOverrides) {

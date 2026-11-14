@@ -41,8 +41,7 @@ public class TaczHitHandler {
         // --- Compute the damage of a single direct hit ---
         float damage;
         if (BlockHPConfig.USE_BULLET_DAMAGE.get()) {
-            damage = bullet.getDamage(hitVec)
-                    * BlockHPConfig.BULLET_DAMAGE_MULTIPLIER.get().floatValue();
+            damage = bullet.getDamage(hitVec) * BlockHPConfig.BULLET_DAMAGE_MULTIPLIER.get().floatValue();
         } else {
             damage = BlockHPConfig.DAMAGE_PER_HIT.get().floatValue();
         }

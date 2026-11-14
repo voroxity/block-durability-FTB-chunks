@@ -137,18 +137,28 @@ public class BlockHPManager {
     }
 
     /**
-     * Gets a block's max HP: an override if one matches, otherwise the hardness formula.
+     * Gets a block's base max HP, ignoring land: a global override if one matches, otherwise the hardness formula.
      */
     public static float getMaxHP(BlockState state) {
+        Optional<Float> global = findGlobalOverride(state);
+        return global.isPresent() ? global.get() : hardnessHP(state);
+    }
+
+    /** The [hp_calculation] blockHPOverrides value for this block, if any entry matches (first match wins). */
+    private static Optional<Float> findGlobalOverride(BlockState state) {
         compileIfNeeded();
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
-
         for (HPOverride override : hpOverrides) {
             if (override.pattern().matcher(id).matches()) {
-                return override.hp();
+                return Optional.of(override.hp());
             }
         }
+        return Optional.empty();
+    }
 
+    /** Max HP from the hardness formula alone. */
+    private static float hardnessHP(BlockState state) {
+        compileIfNeeded();
         float hardness = state.getBlock().defaultDestroyTime();
         float multiplier = BlockHPConfig.HARDNESS_MULTIPLIER.get().floatValue();
         float minHP = BlockHPConfig.MIN_BLOCK_HP.get().floatValue();
@@ -160,8 +170,12 @@ public class BlockHPManager {
     }
 
     /**
-     * Max HP on a specific piece of land. A matching land-specific override is used as-is; otherwise the
-     * base value (global override or hardness formula) is scaled by the land profile's hpMultiplier.
+     * Max HP on a specific piece of land, in this order:
+     * <ol>
+     *   <li>[claims.claimed] blockHPOverrides (only present on claimed land): used as-is.</li>
+     *   <li>[hp_calculation] blockHPOverrides (global, every kind of land): used as-is.</li>
+     *   <li>The hardness formula, scaled by the land profile's hpMultiplier.</li>
+     * </ol>
      */
     public static float getMaxHP(BlockState state, LandProfile profile) {
         if (!profile.hpOverrides().isEmpty()) {
@@ -169,8 +183,12 @@ public class BlockHPManager {
             Optional<Float> landHp = profile.hpOverrideFor(id);
             if (landHp.isPresent()) return Math.max(0.01f, landHp.get());
         }
-        float scaled = getMaxHP(state) * profile.hpMultiplier();
-        return Float.isFinite(scaled) ? Math.max(0.01f, scaled) : getMaxHP(state);
+        Optional<Float> global = findGlobalOverride(state);
+        if (global.isPresent()) return Math.max(0.01f, global.get());
+
+        float base = hardnessHP(state);
+        float scaled = base * profile.hpMultiplier();
+        return Float.isFinite(scaled) ? Math.max(0.01f, scaled) : base;
     }
 
     public static float getCurrentHP(Level level, BlockPos pos, BlockState state) {

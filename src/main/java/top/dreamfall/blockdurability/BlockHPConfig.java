@@ -127,7 +127,9 @@ public class BlockHPConfig {
                 .defineInRange("minBlockHP", 1.0, 0.5, Double.MAX_VALUE);
         BLOCK_HP_OVERRIDES = builder
                 .comment(
-                        "Per-block HP overrides. Takes priority over the hardness formula.",
+                        "Global per-block HP overrides. They apply on ALL land (claimed and unclaimed) and take priority over the hardness formula.",
+                        "The value is the block's exact max HP: the [claims] hpMultiplier values do not scale it.",
+                        "[claims.claimed] blockHPOverrides replaces these values for matching blocks on claimed land.",
                         "Format: \"modid:block_id=hp\", supports wildcards.",
                         "Examples:",
                         "  \"minecraft:obsidian=20\"  - reduce obsidian to 20 HP",
@@ -159,13 +161,14 @@ public class BlockHPConfig {
                 "  claimed   - land inside any FTB Chunks claim",
                 "Per-team overrides for claimed land go in [claims.teams].",
                 "Multipliers stack on top of the values above (hp_calculation, general, explosion).",
+                "HP lookup order: [claims.claimed] blockHPOverrides (claimed land only) > [hp_calculation] blockHPOverrides (all land) > hardness formula x hpMultiplier.",
                 "The defaults change nothing, so existing setups behave exactly as before.")
                 .push("claims");
         FTB_CHUNKS_INTEGRATION = builder
                 .comment("Master switch. If false, all land is treated as unclaimed.")
                 .define("ftbChunksIntegration", true);
-        UNCLAIMED = defineLandSection(builder, "unclaimed", "Settings for land that is not claimed by any team.");
-        CLAIMED = defineLandSection(builder, "claimed", "Settings for land claimed by any team (the baseline for every team).");
+        UNCLAIMED = defineLandSection(builder, "unclaimed", "Settings for land that is not claimed by any team.", false);
+        CLAIMED = defineLandSection(builder, "claimed", "Settings for land claimed by any team (the baseline for every team).", true);
         builder.push("teams");
         TEAM_OVERRIDES = builder
                 .comment(
@@ -198,14 +201,15 @@ public class BlockHPConfig {
         return new Config();
     }
 
-    private static LandSection defineLandSection(ModConfigSpec.Builder builder, String name, String comment) {
+    private static LandSection defineLandSection(ModConfigSpec.Builder builder, String name, String comment,
+                                                  boolean withHpOverrides) {
         LandSection section = new LandSection();
         builder.comment(comment).push(name);
         section.enabled = builder
                 .comment("If false, the durability system ignores blocks on this land (no bullet or explosion durability damage).")
                 .define("enabled", true);
         section.hpMultiplier = builder
-                .comment("Multiplier on every block's max HP on this land (2.0 = twice as tough).")
+                .comment("Multiplier on the max HP of every block on this land (2.0 = twice as tough). Blocks with an exact blockHPOverrides value are not scaled.")
                 .defineInRange("hpMultiplier", 1.0, 0.01, 1000.0);
         section.damageMultiplier = builder
                 .comment("Multiplier on all durability damage (bullets and explosions) dealt to blocks on this land. 0 = invulnerable.")
@@ -213,16 +217,19 @@ public class BlockHPConfig {
         section.healTimeoutSeconds = builder
                 .comment("Seconds before a damaged block on this land heals. -1 = use the global heal setting, 0 = never heal.")
                 .defineInRange("healTimeoutSeconds", -1, -1, 86400);
-        section.blockHPOverrides = builder
-                .comment(
-                        "Per-block HP overrides for this land only. Format: \"modid:block_id=hp\", wildcards allowed. First match wins.",
-                        "A match sets the block's max HP on this land to exactly hp. It beats [hp_calculation] blockHPOverrides,",
-                        "the hardness formula and this section's hpMultiplier (team hpMultiplier values do not scale it either).",
-                        "Examples:",
-                        "  \"minecraft:obsidian=300\"  - obsidian has 300 HP on this land",
-                        "  \"minecraft:*glass*=2\"      - all glass has 2 HP on this land")
-                .defineListAllowEmpty("blockHPOverrides", Arrays.asList(),
-                        BlockHPConfig::isValidHpOverride);
+        if (withHpOverrides) {
+            section.blockHPOverrides = builder
+                    .comment(
+                            "Per-block HP overrides for claimed land only. Format: \"modid:block_id=hp\", wildcards allowed. First match wins.",
+                            "A match sets the block's exact max HP on claimed land. It replaces the matching [hp_calculation] blockHPOverrides",
+                            "value (or the hardness formula) and is not scaled by hpMultiplier (team hpMultiplier values do not scale it either).",
+                            "Blocks with no match here fall back to the global [hp_calculation] overrides.",
+                            "Examples:",
+                            "  \"minecraft:obsidian=300\"  - obsidian has 300 HP on claimed land",
+                            "  \"minecraft:*glass*=2\"      - all glass has 2 HP on claimed land")
+                    .defineListAllowEmpty("blockHPOverrides", Arrays.asList(),
+                            BlockHPConfig::isValidHpOverride);
+        }
         builder.pop();
         return section;
     }
@@ -256,7 +263,7 @@ public class BlockHPConfig {
 
     public static class Config {}
 
-    /** The settings for one kind of land (claimed or unclaimed). */
+    /** The settings for one kind of land (claimed or unclaimed). Only the claimed section has blockHPOverrides. */
     public static class LandSection {
         public ModConfigSpec.BooleanValue enabled;
         public ModConfigSpec.DoubleValue hpMultiplier;
@@ -266,9 +273,11 @@ public class BlockHPConfig {
 
         public LandProfile toProfile() {
             List<LandProfile.HpOverride> overrides = new ArrayList<>();
-            for (String entry : blockHPOverrides.get()) {
-                LandProfile.HpOverride.parse(entry).ifPresentOrElse(overrides::add,
-                        () -> BlockDurability.LOGGER.warn("Invalid blockHPOverrides entry in [claims]: '{}'. Skipping.", entry));
+            if (blockHPOverrides != null) {
+                for (String entry : blockHPOverrides.get()) {
+                    LandProfile.HpOverride.parse(entry).ifPresentOrElse(overrides::add,
+                            () -> BlockDurability.LOGGER.warn("Invalid blockHPOverrides entry in [claims.claimed]: '{}'. Skipping.", entry));
+                }
             }
             return new LandProfile(
                     enabled.get(),

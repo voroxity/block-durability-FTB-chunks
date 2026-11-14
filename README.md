@@ -115,7 +115,7 @@ blockList = [
 ]
 ```
 
-A block's max HP is computed from vanilla hardness by default. `blockHPOverrides` is only for giving individual blocks a fixed value and can normally stay empty:
+A block's max HP is computed from vanilla hardness by default. `blockHPOverrides` is only for giving individual blocks a fixed HP value and can normally stay empty. These overrides are **global**: they apply on all land, and `hpMultiplier` values from the `[claims]` section do not scale them:
 
 ```toml
 [hp_calculation]
@@ -124,7 +124,7 @@ minBlockHP = 1.0
 blockHPOverrides = []
 ```
 
-If you really need to override one block's computed result, add an entry in the form `"minecraft:block_id=value"`.
+If you really need to override one block's computed result, add an entry in the form `"minecraft:block_id=value"`. With FTB Chunks installed, `[claims.claimed]` has its own `blockHPOverrides` that replace these global values on claimed land (see below).
 
 ## Land Claim Compatibility (FTB Chunks, optional)
 
@@ -145,6 +145,7 @@ enabled = true
 hpMultiplier = 1.0
 damageMultiplier = 1.0
 healTimeoutSeconds = -1
+blockHPOverrides = []       # exact HP per block on claimed land only, e.g. "minecraft:obsidian=300"
 
 [claims.teams]
 overrides = [
@@ -157,6 +158,7 @@ overrides = [
 - Multipliers stack on top of the existing values in `hp_calculation`, `general` and `explosion`; the defaults (all 1.0) change nothing.
 - Each `overrides` entry has the form `"<team>|key=value|key=value"`. `<team>` can be the FTB team's UUID, short name or display name (case-insensitive). Only the listed keys are replaced; the rest come from `[claims.claimed]`.
 - Available keys: `enabled`, `hpMultiplier`, `damageMultiplier`, `healTimeoutSeconds`.
+- Block HP is looked up in this order: `[claims.claimed] blockHPOverrides` (claimed land only), then the global `[hp_calculation] blockHPOverrides` (all land), then the hardness formula multiplied by the land's `hpMultiplier`. Overrides are exact values and are never scaled by `hpMultiplier`. Only claimed land has its own override list; unclaimed land just uses the global one.
 - When land is claimed, unclaimed or changes owner, existing damage progress is reset.
 
 ## In-Game Rule

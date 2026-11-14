@@ -6,3 +6,5 @@ build/
 error/
 run/
 logs/
+/.eclipse
+/bin
